@@ -14,4 +14,4 @@ pluralize count [] = "s"
 pluralize count (x:xs) = (x:(pluralize count xs))
 
 formatPosixTime :: POSIXTime -> String
-formatPosixTime = formatTime defaultTimeLocale "%F git %X" . posixSecondsToUTCTime
+formatPosixTime = formatTime defaultTimeLocale "%F %X" . posixSecondsToUTCTime

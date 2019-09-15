@@ -6,6 +6,7 @@ import Data.GI.Base
 import Data.GI.Base.GType (gtypeString, gtypeULong)
 import Data.GI.Base.ShortPrelude (Int32)
 import Data.Text (pack, Text)
+import Data.List (sort)
 
 import System.Directory (getCurrentDirectory, getFileSize)
 import System.Random (getStdRandom, next)
@@ -26,10 +27,16 @@ import System.Posix.Files (getFileStatus, isRegularFile, isDirectory)
 main :: IO ()
 main = do
   Gtk.init Nothing
-  win <- new Gtk.Window [ #title := "FileViewer" ]
+
+  cd <- getCurrentDirectory
+  win <- new Gtk.Window [ #title := pack ("FileViewer [" ++ cd ++ "]")]
+
+  scrolledWindow <- new Gtk.ScrolledWindow [#minContentHeight := 400, #minContentWidth := 500 ]
+  #add win scrolledWindow
+
   on win #destroy Gtk.mainQuit
 
-  filename <- new Gtk.TreeViewColumn [#title := "Name", #resizable := True]
+  filename <- new Gtk.TreeViewColumn [#title := "Name", #resizable := True, #expand := True]
   size <- new Gtk.TreeViewColumn [#title := "Size", #resizable := True]
   lastModified <- new Gtk.TreeViewColumn [#title := "Last modified", #resizable := True]
 
@@ -62,8 +69,8 @@ main = do
 
   runApp (AppState listStore) $ do
     files <- liftIO $ getCurrentDirectory >>= getFiles
-    mapM appendFileView files
-    #add win treeView
+    mapM appendFileView (sort files)
+    #add scrolledWindow treeView
     #showAll win
 
 
@@ -91,11 +98,11 @@ sizeRenderFunc column renderer model iter =
     text <- if isDirectory fileStatus
               then do
                 count <- getFileCount file
-                return $ (show count) ++ " " ++ (pluralize count "object")
+                return $ (show count) ++ " " ++ (pluralize count "object") ++ "   "
             else if isRegularFile fileStatus
               then do
                 size <- getFileSize file
-                return $ (show size) ++ " " ++ "bytes"
+                return $ (show size) ++ " " ++ "bytes   "
             else return ""
     Gtk.setCellRendererTextText textRenderer (pack text)
 
