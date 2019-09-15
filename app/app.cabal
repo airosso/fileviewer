@@ -1,0 +1,33 @@
+name:                app
+version:             0.1.0.0
+synopsis:            Fileviewer app
+description:         Haskell project
+
+homepage:            https://github.com/airosso/fileviewer
+license:             MIT
+license-file:        LICENSE
+author:              Arina Rossomakhina
+
+category:            Web
+build-type:          Simple
+cabal-version:       >=2.0
+tested-with:         GHC == 8.6.5
+
+Executable App
+  hs-source-dirs: src
+  main-is: Main.hs
+  Default-language: Haskell2010
+  other-modules:
+    Files, Utils, AppState
+  build-depends:
+      base >= 4.9 && < 5
+    , gi-gtk
+    , haskell-gi-base
+    , random
+    , directory
+    , unix
+    , filepath
+    , mtl
+    , text
+    , time
+  ghc-options: -threaded
