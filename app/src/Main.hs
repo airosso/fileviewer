@@ -4,15 +4,15 @@ module Main where
 import qualified GI.Gtk as Gtk
 import Data.GI.Base
 import Data.GI.Base.GType (gtypeString, gtypeULong)
-import Data.GI.Base.ShortPrelude (Int32)
+import Data.GI.Base.ShortPrelude (Int32, clear)
 import Data.Text (pack, Text)
 import Data.List (sort)
 import Data.IORef (newIORef, readIORef, writeIORef, IORef)
 import Data.Functor (($>))
 
-import System.Directory (getCurrentDirectory, getFileSize, makeAbsolute)
+import System.Directory (getCurrentDirectory, getFileSize, makeAbsolute, canonicalizePath)
 import System.Posix.Files (getFileStatus, isRegularFile, isDirectory)
-import System.FilePath.Posix ((</>))
+import System.FilePath.Posix ((</>), isAbsolute, normalise, takeFileName)
 import System.Random (getStdRandom, next)
 
 import Control.Monad (mapM)
@@ -23,7 +23,7 @@ import Foreign.Ptr (castPtr, Ptr(..))
 import Foreign.Storable (peek)
 
 import AppState (App, AppState(..), getListStore)
-import Files (getFileName, getFiles, getModificationTime, getFileCount)
+import Files (getFileName, getFiles, getModificationTime, getFileCount, isFileHidden, isReadable)
 import Utils (toInt32, pluralize, formatPosixTime, byteConverter)
 
 main :: IO ()
@@ -73,11 +73,9 @@ main = do
 
   runApp (AppState listStore cdRef win) $ do
     onRowActivated >>= liftIO . (on treeView #rowActivated)
-    files <- liftIO $ getCurrentDirectory >>= getFiles
-    mapM appendFileView (sort files)
+    liftIO (getCurrentDirectory >>= makeAbsolute) >>= changeDirectory
     #add scrolledWindow treeView
     #showAll win
-
 
 runApp :: AppState -> App () -> IO ()
 runApp state action = do
@@ -99,8 +97,10 @@ changeDirectory newPath = do
   win <- asks getWindow
   #clear listStore
   cdRef <- asks getCD
-  cd <- liftIO $ readIORef cdRef
-  newAbsolutePath <- liftIO $ makeAbsolute $ cd </> newPath
+  currentDir <- liftIO $ readIORef cdRef
+  newAbsolutePath <- if isAbsolute newPath
+                       then liftIO $ canonicalizePath newPath
+                       else liftIO $ canonicalizePath (currentDir </> newPath)
   set win [#title := pack ("FileViewer [" ++ newAbsolutePath ++ "]")]
   files <- liftIO $ getFiles newAbsolutePath
   liftIO $ writeIORef cdRef newAbsolutePath
@@ -110,58 +110,64 @@ filenameRenderFunc :: Gtk.TreeCellDataFunc
 filenameRenderFunc column renderer model iter =
   do
     textRenderer <- (unsafeCastTo Gtk.CellRendererText renderer)
-    userData <- Gtk.getTreeIterUserData iter
     (Just (file :: String)) <- (#getValue model iter 0) >>= fromGValue
     filename <- getFileName file
-    Gtk.setCellRendererTextText textRenderer (pack filename)
+    set textRenderer [#text := pack filename]
+    applyAccessStyles file textRenderer
+
+applyAccessStyles :: FilePath -> Gtk.CellRendererText -> IO ()
+applyAccessStyles file textRenderer = do
+  isHidden <- isFileHidden file
+  readable <- isReadable file
+  if isHidden
+    then set textRenderer [#foreground := "#aaaaaa"]
+    else clear textRenderer #foreground
+  if readable
+    then clear textRenderer #background
+    else set textRenderer [#background := "#ffd4d4"]
 
 sizeRenderFunc :: Gtk.TreeCellDataFunc
-sizeRenderFunc column renderer model iter =
-  do
+sizeRenderFunc column renderer model iter = do
     textRenderer <- (unsafeCastTo Gtk.CellRendererText renderer)
-    userData <- Gtk.getTreeIterUserData iter
     (Just (file :: String)) <- (#getValue model iter 1) >>= fromGValue
-    catch (renderSize file textRenderer) (\(e :: SomeException) -> fallbackRender textRenderer)
-  where
-    renderSize file textRenderer = do
-      fileStatus <- getFileStatus file
-      text <- if isDirectory fileStatus
-                then do
-                  count <- getFileCount file
-                  return $ (show count) ++ " " ++ (pluralize count "object") ++ "   "
-              else if isRegularFile fileStatus
-                then do
-                  size <- getFileSize file
-                  return $ byteConverter size
-              else return ""
-      Gtk.setCellRendererTextText textRenderer (pack text)
-    fallbackRender textRenderer =
-      do
-        Gtk.setCellRendererTextText textRenderer $ pack ""
+    readable <- isReadable file
+    if readable && takeFileName (file) /= ".."
+      then do
+        fileStatus <- getFileStatus file
+        text <- if isDirectory fileStatus
+                  then do
+                    count <- getFileCount file
+                    return $ (show count) ++ " " ++ (pluralize count "object") ++ "   "
+                else if isRegularFile fileStatus
+                  then do
+                    size <- getFileSize file
+                    return $ byteConverter size
+                else return ""
+        Gtk.setCellRendererTextText textRenderer (pack text)
+    else
+      Gtk.setCellRendererTextText textRenderer (pack "")
+    applyAccessStyles file textRenderer
 
 
 lastModifiedRenderFunc :: Gtk.TreeCellDataFunc
 lastModifiedRenderFunc column renderer model iter =
   do
     textRenderer <- (unsafeCastTo Gtk.CellRendererText renderer)
-    catch (renderImpl textRenderer) (\(e :: SomeException) -> fallbackRender textRenderer)
-  where
-    renderImpl textRenderer =
-      do
-        userData <- Gtk.getTreeIterUserData iter
-        (Just (file :: String)) <- (#getValue model iter 1) >>= fromGValue
+    (Just (file :: String)) <- (#getValue model iter 1) >>= fromGValue
+    readable <- isReadable file
+    if readable && takeFileName (file) /= ".."
+      then do
         fileStatus <- getFileStatus file
         let time = getModificationTime fileStatus
-        Gtk.setCellRendererTextText textRenderer $ pack $ formatPosixTime time
-    fallbackRender textRenderer =
-      do
-        Gtk.setCellRendererTextText textRenderer $ pack ""
-
+        set textRenderer [#text := pack $ formatPosixTime time]
+      else clear textRenderer #text
+    applyAccessStyles file textRenderer
 
 appendFileView :: FilePath -> App ()
 appendFileView file = do
   listStore <- asks getListStore
   iter <- #append listStore
-  --lastModified <- getModificationTime file -- try/catch
-  values <- liftIO $ sequenceA [toGValue (Just file), toGValue (Just file), toGValue (Just file)]
+  currentDirRef <- asks getCD
+  currentDir <- liftIO $ readIORef currentDirRef
+  values <- liftIO $ sequenceA $ take 3 $ repeat $ toGValue (Just $ currentDir </> file)
   liftIO $ #set listStore iter [0 .. 2] values
