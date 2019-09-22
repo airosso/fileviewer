@@ -119,6 +119,19 @@ entryFocusCallback isIn = do
       else set entry [#text := pack dirName]
     return True
 
+showErrorDialog :: String -> String -> App ()
+showErrorDialog text secondary = do
+  win <- asks getWindow
+  dialog <- new Gtk.MessageDialog [ #text := pack text
+                                  , #secondaryText := pack secondary
+                                  , #messageType := Gtk.MessageTypeError
+                                  , #decorated := True
+                                  , #deletable := True]
+  #addButton dialog "OK" 0
+  #setTransientFor dialog (Just win)
+  #setModal dialog False
+  #run dialog $> ()
+  #destroy dialog
 
 getHeaderBar :: App Gtk.HeaderBar
 getHeaderBar = do
@@ -177,20 +190,33 @@ setOnRowActivatedCallback = do
 
 changeDirectory :: FilePath -> App ()
 changeDirectory newPath = do
-  listStore <- asks getListStore
-  win <- asks getWindow
-  #clear listStore
+  state <- ask
   cdRef <- asks getCD
-  currentDir <- liftIO $ readIORef cdRef
-  newAbsolutePath <- if isAbsolute newPath
-                       then liftIO $ canonicalizePath newPath
-                       else liftIO $ canonicalizePath (currentDir </> newPath)
-  entry <- getEntry
-  filename <- liftIO $ getDirectoryName newAbsolutePath
-  set entry [#text := pack filename]
-  files <- liftIO $ getFiles newAbsolutePath
-  liftIO $ writeIORef cdRef newAbsolutePath
-  (mapM appendFileRow (sort files)) $> ()
+  cdBefore <- liftIO $ readIORef cdRef
+  result <- liftIO $ catch (runReaderT changeDirectoryImpl state) (errorHandler (writeIORef cdRef cdBefore))
+  case result of
+    Just (title, message) -> showErrorDialog title message
+    Nothing -> return ()
+  where
+    errorHandler :: IO () -> SomeException -> IO (Maybe (String, String))
+    errorHandler before e = do
+      before
+      return $ Just ("Cannot change directory", show e)
+    changeDirectoryImpl = do
+      listStore <- asks getListStore
+      win <- asks getWindow
+      cdRef <- asks getCD
+      currentDir <- liftIO $ readIORef cdRef
+      newAbsolutePath <- if isAbsolute newPath
+                           then liftIO $ canonicalizePath newPath
+                           else liftIO $ canonicalizePath (currentDir </> newPath)
+      filename <- liftIO $ getDirectoryName newAbsolutePath
+      files <- liftIO $ getFiles newAbsolutePath
+      #clear listStore
+      liftIO $ writeIORef cdRef newAbsolutePath
+      (mapM appendFileRow (sort files))
+      entry <- getEntry
+      set entry [#text := pack filename] $> Nothing
 
 
 filenameRenderFunc :: Gtk.TreeCellDataFunc
