@@ -26,7 +26,7 @@ import Control.Exception (catch, SomeException)
 import Foreign.Ptr (castPtr, Ptr(..))
 import Foreign.Storable (peek)
 
-import AppState (App, AppState(..), getListStore, findIcon, IconType(..), platformIcons, getIcon, runApp)
+import AppState (App, AppState(..), getListStore, findIcon, IconType(..), platformIcons, getIcon, runApp, appIcon)
 import Files (getFileName, getFiles, getModificationTime, getFileCount, isFileHidden, isReadable, getFileFromRow, appendFileRow, getRowFileStatus, isGoUpFile, getDirectoryName)
 import Utils (toInt32, pluralize, formatPosixTime, byteConverter)
 
@@ -56,6 +56,7 @@ main = do
   icons <- platformIcons
 
   runApp (AppState win treeView columns listStore cdRef icons) $ do
+    setAppIcon
     initIconColumn
     initFilenameColumn
     initSizeColumn
@@ -66,6 +67,12 @@ main = do
     liftIO (getCurrentDirectory >>= makeAbsolute) >>= changeDirectory
     #add scrolledWindow treeView
     #showAll win
+
+setAppIcon :: App ()
+setAppIcon = do
+  win <- asks getWindow
+  icon <- liftIO $ appIcon
+  Gtk.windowSetIcon win (Just icon)
 
 initHeaderBar :: App ()
 initHeaderBar = do

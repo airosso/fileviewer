@@ -1,7 +1,7 @@
 module AppState where
 
 import qualified GI.Gtk as Gtk
-import GI.GdkPixbuf.Objects (Pixbuf, pixbufNewFromFileAtSize)
+import GI.GdkPixbuf.Objects (Pixbuf, pixbufNewFromFileAtSize, pixbufNewFromFile)
 import Control.Monad.Reader (ReaderT, asks, liftIO, runReaderT)
 import Data.IORef (newIORef, IORef)
 import Data.Text (pack)
@@ -40,6 +40,9 @@ getIcon status
 
 findIcon :: IconType -> App Pixbuf
 findIcon iconType = (snd . head . filter (((==) iconType) . fst)) <$> (asks getIcons)
+
+appIcon :: IO Pixbuf
+appIcon = getDataFileName "resources/icons/png/027-search.png" >>= pixbufNewFromFile
 
 data IconType = FileIcon
               | LockedFileIcon
