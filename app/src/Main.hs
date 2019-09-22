@@ -16,14 +16,14 @@ import System.FilePath.Posix ((</>), isAbsolute, normalise, takeFileName)
 import System.Random (getStdRandom, next)
 
 import Control.Monad (mapM)
-import Control.Monad.Reader (asks, ask, liftIO, runReaderT)
+import Control.Monad.Reader (asks, ask, liftIO, runReaderT, when)
 import Control.Exception (catch, SomeException)
 
 import Foreign.Ptr (castPtr, Ptr(..))
 import Foreign.Storable (peek)
 
-import AppState (App, AppState(..), getListStore, findIcon, IconType(..), platformIcons)
-import Files (getFileName, getFiles, getModificationTime, getFileCount, isFileHidden, isReadable)
+import AppState (App, AppState(..), getListStore, findIcon, IconType(..), platformIcons, getIcon)
+import Files (getFileName, getFiles, getModificationTime, getFileCount, isFileHidden, isReadable, getFileFromRow, appendFileRow, getRowFileStatus, isGoUpFile)
 import Utils (toInt32, pluralize, formatPosixTime, byteConverter)
 
 main :: IO ()
@@ -42,9 +42,7 @@ main = do
   filename <- new Gtk.TreeViewColumn [#title := "Name", #resizable := True, #expand := True]
   size <- new Gtk.TreeViewColumn [#title := "Size", #resizable := True]
   lastModified <- new Gtk.TreeViewColumn [#title := "Last modified", #resizable := True]
-
   listStore <- Gtk.listStoreNew (take 4 (repeat gtypeString))
-
   treeView <- new Gtk.TreeView [#model := listStore]
 
   filenameCellRenderer <- Gtk.cellRendererTextNew
@@ -58,7 +56,6 @@ main = do
 
   let installRenderer = \renderer column -> do { abstractRenderer <- Gtk.toCellRenderer renderer;
                                                  #packStart column abstractRenderer False }
-
 
   installRenderer filenameCellRenderer filename
   installRenderer sizeCellRenderer size
@@ -74,17 +71,19 @@ main = do
   cdRef <- getCurrentDirectory >>= newIORef
   icons <- platformIcons
 
-  runApp (AppState win [] listStore cdRef icons) $ do
+  runApp (AppState win [iconColumn, filename, size, lastModified] listStore cdRef icons) $ do
     iconRenderFunc >>= liftIO . (#setCellDataFunc iconColumn iconRenderer) . Just
     onRowActivated >>= liftIO . (on treeView #rowActivated)
     liftIO (getCurrentDirectory >>= makeAbsolute) >>= changeDirectory
     #add scrolledWindow treeView
     #showAll win
 
+
 runApp :: AppState -> App () -> IO ()
 runApp state action = do
   runReaderT action state
   Gtk.main
+
 
 onRowActivated :: App Gtk.TreeViewRowActivatedCallback
 onRowActivated = do
@@ -94,6 +93,7 @@ onRowActivated = do
     (_, iter) <- #getIter listStore path
     (Just (filepath :: FilePath)) <- liftIO $ (#getValue listStore iter 0) >>= fromGValue
     changeDirectory filepath
+
 
 changeDirectory :: FilePath -> App ()
 changeDirectory newPath = do
@@ -108,27 +108,14 @@ changeDirectory newPath = do
   set win [#title := pack ("FileViewer [" ++ newAbsolutePath ++ "]")]
   files <- liftIO $ getFiles newAbsolutePath
   liftIO $ writeIORef cdRef newAbsolutePath
-  (mapM appendFileView (sort files)) $> ()
+  (mapM appendFileRow (sort files)) $> ()
+
 
 filenameRenderFunc :: Gtk.TreeCellDataFunc
 filenameRenderFunc column renderer model iter =
-  do
     textRenderer <- (unsafeCastTo Gtk.CellRendererText renderer)
-    (Just (file :: String)) <- (#getValue model iter 0) >>= fromGValue
-    filename <- getFileName file
-    set textRenderer [#text := pack filename]
-    applyAccessStyles file textRenderer
+    set textRenderer [#text :=> (getFileFromRow model iter) >>= getFileName >>= (return . pack)]
 
-applyAccessStyles :: FilePath -> Gtk.CellRendererText -> IO ()
-applyAccessStyles file textRenderer = do
-  isHidden <- isFileHidden file
-  readable <- isReadable file
-  if isHidden
-    then set textRenderer [#foreground := "#aaaaaa"]
-    else clear textRenderer #foreground
-  if readable
-    then clear textRenderer #background
-    else set textRenderer [#background := "#ffd4d4"]
 
 sizeRenderFunc :: Gtk.TreeCellDataFunc
 sizeRenderFunc column renderer model iter = do
@@ -150,22 +137,23 @@ sizeRenderFunc column renderer model iter = do
         Gtk.setCellRendererTextText textRenderer (pack text)
     else
       Gtk.setCellRendererTextText textRenderer (pack "")
-    applyAccessStyles file textRenderer
+    set textRenderer [#foreground := "#aaaaaa"]
 
 
 lastModifiedRenderFunc :: Gtk.TreeCellDataFunc
 lastModifiedRenderFunc column renderer model iter =
   do
     textRenderer <- (unsafeCastTo Gtk.CellRendererText renderer)
-    (Just (file :: String)) <- (#getValue model iter 0) >>= fromGValue
-    readable <- isReadable file
-    if readable && takeFileName file /= ".."
-      then do
+    file <- getFileFromRow model iter
+    fileStatus <- getRowFileStatus file
+    case fileStatus of
+      Just status -> do
         fileStatus <- getFileStatus file
-        let time = getModificationTime fileStatus
-        set textRenderer [#text := pack $ formatPosixTime time]
-      else clear textRenderer #text
-    applyAccessStyles file textRenderer
+        set textRenderer [#text := pack $ formatPosixTime $ getModificationTime fileStatus]
+      Nothing -> clear textRenderer #text
+    when (not $ isGoUpFile file) (clear textRenderer #text)
+    set textRenderer [#foreground := "#aaaaaa"]
+
 
 iconRenderFunc :: App Gtk.TreeCellDataFunc
 iconRenderFunc = do
@@ -175,26 +163,12 @@ iconRenderFunc = do
     iconRenderFuncImpl :: Gtk.TreeViewColumn -> Gtk.CellRenderer -> Gtk.TreeModel -> Gtk.TreeIter -> App ()
     iconRenderFuncImpl column renderer model iter = do
       pixBufRenderer <- liftIO $ (unsafeCastTo Gtk.CellRendererPixbuf renderer)
-      (Just (file :: String)) <- liftIO $ (#getValue model iter 0) >>= fromGValue
-      readable <- liftIO $ isReadable file
-      if readable && takeFileName file /= ".."
-        then do
-          fileStatus <- liftIO $ getFileStatus file
-          icon <- getIcon fileStatus
+      file <- liftIO $ getFileFromRow model iter
+      fileStatus <- liftIO $ getRowFileStatus file
+      case fileStatus of
+        Just status -> do
+          icon <- getIcon status
           case icon of
             Just buf -> liftIO $ Gtk.setCellRendererPixbufPixbuf pixBufRenderer buf
             Nothing -> liftIO $ Gtk.clearCellRendererPixbufPixbuf pixBufRenderer
-        else (findIcon LockedFileIcon) >>= (liftIO . (Gtk.setCellRendererPixbufPixbuf pixBufRenderer))
-    getIcon status
-        | isRegularFile status = Just <$> findIcon FileIcon
-        | isDirectory status = Just <$> findIcon FolderIcon
-        | otherwise = liftIO $ return Nothing
-
-appendFileView :: FilePath -> App ()
-appendFileView file = do
-  listStore <- asks getListStore
-  iter <- #append listStore
-  currentDirRef <- asks getCD
-  currentDir <- liftIO $ readIORef currentDirRef
-  values <- liftIO $ sequenceA $ take 4 $ repeat $ toGValue (Just $ currentDir </> file)
-  liftIO $ #set listStore iter [0 .. 3] values
+        Nothing -> (findIcon LockedFileIcon) >>= (liftIO . (Gtk.setCellRendererPixbufPixbuf pixBufRenderer))
