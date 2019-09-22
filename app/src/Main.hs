@@ -5,6 +5,9 @@ import qualified GI.Gtk as Gtk
 import Data.GI.Base
 import Data.GI.Base.GType (gtypeString, gtypeULong)
 import Data.GI.Base.ShortPrelude (Int32, clear)
+
+import GI.Pango.Enums (EllipsizeMode(..))
+
 import Data.Text (pack, Text)
 import Data.List (sort)
 import Data.IORef (newIORef, readIORef, writeIORef, IORef)
@@ -112,32 +115,26 @@ changeDirectory newPath = do
 
 
 filenameRenderFunc :: Gtk.TreeCellDataFunc
-filenameRenderFunc column renderer model iter =
+filenameRenderFunc column renderer model iter = do
     textRenderer <- (unsafeCastTo Gtk.CellRendererText renderer)
-    set textRenderer [#text :=> (getFileFromRow model iter) >>= getFileName >>= (return . pack)]
+    set textRenderer [#text :=> (getFileFromRow model iter) >>= getFileName >>= (return . pack), #ellipsize := EllipsizeModeEnd]
 
 
 sizeRenderFunc :: Gtk.TreeCellDataFunc
 sizeRenderFunc column renderer model iter = do
     textRenderer <- (unsafeCastTo Gtk.CellRendererText renderer)
-    (Just (file :: String)) <- (#getValue model iter 0) >>= fromGValue
-    readable <- isReadable file
-    if readable && takeFileName (file) /= ".."
-      then do
-        fileStatus <- getFileStatus file
-        text <- if isDirectory fileStatus
-                  then do
-                    count <- getFileCount file
-                    return $ (show count) ++ " " ++ (pluralize count "object") ++ "   "
-                else if isRegularFile fileStatus
-                  then do
-                    size <- getFileSize file
-                    return $ byteConverter size
-                else return ""
-        Gtk.setCellRendererTextText textRenderer (pack text)
-    else
-      Gtk.setCellRendererTextText textRenderer (pack "")
+    file <- getFileFromRow model iter
+    fileStatus <- getRowFileStatus file
+    case fileStatus of
+      Just status -> set textRenderer [#text :=> (pack <$> getSizeLabel status file)]
+      Nothing -> clear textRenderer #text
+    when (isGoUpFile file) (clear textRenderer #text)
     set textRenderer [#foreground := "#aaaaaa"]
+  where
+    getSizeLabel status file
+      | isDirectory status = (\count -> (show count) ++ " " ++ (pluralize count "object") ++ "   ") <$> (getFileCount file)
+      | isRegularFile status = byteConverter <$> getFileSize file
+      | otherwise = return ""
 
 
 lastModifiedRenderFunc :: Gtk.TreeCellDataFunc
@@ -151,7 +148,7 @@ lastModifiedRenderFunc column renderer model iter =
         fileStatus <- getFileStatus file
         set textRenderer [#text := pack $ formatPosixTime $ getModificationTime fileStatus]
       Nothing -> clear textRenderer #text
-    when (not $ isGoUpFile file) (clear textRenderer #text)
+    when (isGoUpFile file) (clear textRenderer #text)
     set textRenderer [#foreground := "#aaaaaa"]
 
 

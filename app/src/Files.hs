@@ -29,7 +29,7 @@ getFiles dir = do
   return $ filter (\x -> takeFileName x /= ".") files
 
 getFileCount :: FilePath -> IO Int
-getFileCount x = getDirectoryContents x >>= return . length
+getFileCount x = getDirectoryContents x >>= return . (flip (-) 2) . length
 
 getFileFromRow :: Gtk.TreeModel -> Gtk.TreeIter -> IO FilePath
 getFileFromRow model iter = do
@@ -37,7 +37,7 @@ getFileFromRow model iter = do
   return file
 
 isGoUpFile :: FilePath -> Bool
-isGoUpFile = ((/=) "..") . takeFileName
+isGoUpFile = ((==) "..") . takeFileName
 
 appendFileRow :: FilePath -> App ()
 appendFileRow file = do

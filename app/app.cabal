@@ -32,4 +32,5 @@ Executable App
     , text
     , time
     , gi-gdkpixbuf
+    , gi-pango
   ghc-options: -threaded
