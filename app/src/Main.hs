@@ -8,10 +8,11 @@ import Data.GI.Base.ShortPrelude (Int32, clear, AttrOpTag(..), AttrOp(..))
 
 import GI.Pango.Enums (EllipsizeMode(..))
 
-import Data.Text (pack, Text)
+import Data.Text (pack, unpack, Text)
 import Data.List (sort)
 import Data.IORef (newIORef, readIORef, writeIORef, IORef)
 import Data.Functor (($>))
+import Data.Maybe (fromJust)
 
 import System.Directory (getCurrentDirectory, getFileSize, makeAbsolute, canonicalizePath)
 import System.Posix.Files (getFileStatus, isRegularFile, isDirectory)
@@ -26,21 +27,17 @@ import Foreign.Ptr (castPtr, Ptr(..))
 import Foreign.Storable (peek)
 
 import AppState (App, AppState(..), getListStore, findIcon, IconType(..), platformIcons, getIcon, runApp)
-import Files (getFileName, getFiles, getModificationTime, getFileCount, isFileHidden, isReadable, getFileFromRow, appendFileRow, getRowFileStatus, isGoUpFile)
+import Files (getFileName, getFiles, getModificationTime, getFileCount, isFileHidden, isReadable, getFileFromRow, appendFileRow, getRowFileStatus, isGoUpFile, getDirectoryName)
 import Utils (toInt32, pluralize, formatPosixTime, byteConverter)
 
 main :: IO ()
 main = do
   Gtk.init Nothing
-
-  cd <- getCurrentDirectory
-  win <- new Gtk.Window [ #title := pack ("FileViewer [" ++ cd ++ "]")]
-
+  win <- new Gtk.ApplicationWindow []
+  treeView <- new Gtk.TreeView []
   scrolledWindow <- new Gtk.ScrolledWindow [#minContentHeight := 400, #minContentWidth := 500 ]
   #add win scrolledWindow
-
   on win #destroy Gtk.mainQuit
-  treeView <- new Gtk.TreeView []
 
   let createColumn = \treeView args -> do { column <- new Gtk.TreeViewColumn args
                                           ; #appendColumn treeView column
@@ -63,12 +60,73 @@ main = do
     initFilenameColumn
     initSizeColumn
     initModificationColumn
+    initHeaderBar
+    initEntryBar
     setOnRowActivatedCallback
     liftIO (getCurrentDirectory >>= makeAbsolute) >>= changeDirectory
     #add scrolledWindow treeView
     #showAll win
 
+initHeaderBar :: App ()
+initHeaderBar = do
+  window <- asks getWindow >>= (liftIO . (unsafeCastTo Gtk.Window))
+  headerBar <- new Gtk.HeaderBar []
+  box <- new Gtk.Box [#orientation := Gtk.OrientationHorizontal]
+  label <- new Gtk.Label [#label := "FileViewer by "]
+  link <- Gtk.linkButtonNewWithLabel (pack "https://github.com/airosso/fileviewer") (Just . pack $ "airosso")
+  #setRelief link Gtk.ReliefStyleNone
+  Gtk.containerAdd box label
+  Gtk.containerAdd box link
+  #packStart headerBar box
+  Gtk.headerBarSetShowCloseButton headerBar True
+  Gtk.windowSetTitlebar window (Just headerBar)
 
+initEntryBar :: App ()
+initEntryBar = do
+  headerBar <- getHeaderBar
+  entry <- new Gtk.Entry [#text := "hello"]
+  Gtk.widgetSetHexpand entry True
+  Gtk.widgetSetHalign entry Gtk.AlignFill
+  Gtk.headerBarSetCustomTitle headerBar (Just entry)
+  folderIcon <- findIcon FolderIcon
+  callbackIn <- entryFocusCallback True
+  callbackOut <- entryFocusCallback False
+  callbackActivate <- onEntryActivateCallback
+  after entry #focusInEvent callbackIn
+  after entry #focusOutEvent callbackOut
+  on entry #activate callbackActivate
+  Gtk.entrySetIconFromPixbuf entry Gtk.EntryIconPositionPrimary (Just folderIcon)
+
+onEntryActivateCallback = do
+  state <- ask
+  return $ runReaderT action state
+  where
+    action = do
+      entry <- getEntry
+      entryText <- get entry #text
+      changeDirectory $ unpack entryText
+      treeView <- asks getTreeView
+      #grabFocus treeView
+
+entryFocusCallback isIn = do
+  cdRef <- asks getCD
+  entry <- getEntry
+  return $ \_ -> do
+    path <- readIORef cdRef
+    dirName <- getDirectoryName path
+    if isIn
+      then set entry [#text := pack path]
+      else set entry [#text := pack dirName]
+    return True
+
+
+getHeaderBar :: App Gtk.HeaderBar
+getHeaderBar = do
+    win <- asks getWindow
+    liftIO $ (Gtk.windowGetTitlebar win >>= return . fromJust >>= (unsafeCastTo Gtk.HeaderBar))
+
+getEntry :: App Gtk.Entry
+getEntry = getHeaderBar >>= liftIO . #getCustomTitle >>= liftIO . (unsafeCastTo Gtk.Entry) . fromJust
 
 initIconColumn :: App ()
 initIconColumn = do
@@ -127,7 +185,9 @@ changeDirectory newPath = do
   newAbsolutePath <- if isAbsolute newPath
                        then liftIO $ canonicalizePath newPath
                        else liftIO $ canonicalizePath (currentDir </> newPath)
-  set win [#title := pack ("FileViewer [" ++ newAbsolutePath ++ "]")]
+  entry <- getEntry
+  filename <- liftIO $ getDirectoryName newAbsolutePath
+  set entry [#text := pack filename]
   files <- liftIO $ getFiles newAbsolutePath
   liftIO $ writeIORef cdRef newAbsolutePath
   (mapM appendFileRow (sort files)) $> ()

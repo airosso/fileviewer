@@ -62,6 +62,9 @@ getRowFileStatus path = do
 getFileName :: FilePath -> IO String
 getFileName = return . takeFileName
 
+getDirectoryName :: FilePath -> IO String
+getDirectoryName path = getFileName path >>= return . (\x -> if null x then "/" else x)
+
 isFileHidden :: FilePath -> IO Bool
 isFileHidden = isFileHidden' . takeFileName
   where

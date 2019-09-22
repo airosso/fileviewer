@@ -11,7 +11,7 @@ import System.Posix.Files (FileStatus, isDirectory, isRegularFile)
 import Paths_app (getDataFileName)
 
 type App a = ReaderT AppState IO a
-data AppState = AppState { getWindow :: Gtk.Window
+data AppState = AppState { getWindow :: Gtk.ApplicationWindow
                          , getTreeView :: Gtk.TreeView
                          , getColumns :: [Gtk.TreeViewColumn]
                          , getListStore :: Gtk.ListStore
