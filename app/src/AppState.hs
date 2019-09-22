@@ -1,9 +1,34 @@
 module AppState where
 
 import qualified GI.Gtk as Gtk
-import Control.Monad.Reader (ReaderT)
+import GI.GdkPixbuf.Objects (Pixbuf, pixbufNewFromFileAtSize)
+import Control.Monad.Reader (ReaderT, asks)
 import Data.IORef (newIORef, IORef)
+import Data.Text (pack)
 
-data AppState = AppState { getListStore :: Gtk.ListStore, getCD :: IORef FilePath, getWindow :: Gtk.Window }
+import Paths_app (getDataFileName)
 
 type App a = ReaderT AppState IO a
+data AppState = AppState { getWindow :: Gtk.Window
+                         , getColumns :: [Gtk.TreeViewColumn]
+                         , getListStore :: Gtk.ListStore
+                         , getCD :: IORef FilePath
+                         , getIcons :: [(IconType, Pixbuf)]
+                         }
+
+platformIcons :: IO [(IconType, Pixbuf)]
+platformIcons = sequenceA $ map (\(path, char) -> ((pathTransform path) >>= (\p -> pixbufNewFromFileAtSize p 24 24)) >>= \x -> return (char, x)) iconList
+  where pathTransform path = (getDataFileName $ "resources/icons/png/" ++ path)
+        iconList = [ ("012-folder.png", FolderIcon)
+                   , ("003-document.png", FileIcon)
+                   , ("019-password.png", LockedFileIcon)
+                   ]
+
+findIcon :: IconType -> App Pixbuf
+findIcon iconType = (snd . head . filter (((==) iconType) . fst)) <$> (asks getIcons)
+
+data IconType = FileIcon
+              | LockedFileIcon
+              | FolderIcon
+              deriving Eq
+

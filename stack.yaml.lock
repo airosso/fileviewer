@@ -60,6 +60,13 @@ packages:
       sha256: d01f87bca5d77addf0d8b565b7de063644836c850915402e8ce3b9d868279213
   original:
     hackage: time-1.8.0.2
+- completed:
+    hackage: gi-gdkpixbuf-2.0.23@sha256:f08d95ddea4431978e872684af359ece52f241e00acdbfffade86211f0a49e47,3842
+    pantry-tree:
+      size: 368
+      sha256: 71b891d78fd2a1ac65f6ddaddbf3fbd664e72eb7ca0798f417fae2abc91f294a
+  original:
+    hackage: gi-gdkpixbuf-2.0.23
 snapshots:
 - completed:
     size: 523884

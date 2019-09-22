@@ -44,6 +44,7 @@ extra-deps:
   - mtl-2.2.2
   - text-1.2.3.1
   - time-1.8.0.2
+  - gi-gdkpixbuf-2.0.23
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

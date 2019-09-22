@@ -12,13 +12,14 @@ category:            Web
 build-type:          Simple
 cabal-version:       >=2.0
 tested-with:         GHC == 8.6.5
+data-dir:            resources
 
 Executable App
   hs-source-dirs: src
   main-is: Main.hs
   Default-language: Haskell2010
   other-modules:
-    Files, Utils, AppState
+    Files, Utils, AppState, Paths_app
   build-depends:
       base >= 4.9 && < 5
     , gi-gtk
@@ -30,4 +31,5 @@ Executable App
     , mtl
     , text
     , time
+    , gi-gdkpixbuf
   ghc-options: -threaded
