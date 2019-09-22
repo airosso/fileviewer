@@ -1,10 +1,10 @@
-{-# LANGUAGE OverloadedStrings, OverloadedLabels, TypeApplications, ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings, OverloadedLabels, TypeApplications, ScopedTypeVariables, FlexibleContexts #-}
 module Main where
 
 import qualified GI.Gtk as Gtk
 import Data.GI.Base
 import Data.GI.Base.GType (gtypeString, gtypeULong)
-import Data.GI.Base.ShortPrelude (Int32, clear)
+import Data.GI.Base.ShortPrelude (Int32, clear, AttrOpTag(..), AttrOp(..))
 
 import GI.Pango.Enums (EllipsizeMode(..))
 
@@ -25,7 +25,7 @@ import Control.Exception (catch, SomeException)
 import Foreign.Ptr (castPtr, Ptr(..))
 import Foreign.Storable (peek)
 
-import AppState (App, AppState(..), getListStore, findIcon, IconType(..), platformIcons, getIcon)
+import AppState (App, AppState(..), getListStore, findIcon, IconType(..), platformIcons, getIcon, runApp)
 import Files (getFileName, getFiles, getModificationTime, getFileCount, isFileHidden, isReadable, getFileFromRow, appendFileRow, getRowFileStatus, isGoUpFile)
 import Utils (toInt32, pluralize, formatPosixTime, byteConverter)
 
@@ -40,52 +40,66 @@ main = do
   #add win scrolledWindow
 
   on win #destroy Gtk.mainQuit
+  treeView <- new Gtk.TreeView []
 
-  iconColumn <- new Gtk.TreeViewColumn [#title := "", #resizable := False, #expand := False]
-  filename <- new Gtk.TreeViewColumn [#title := "Name", #resizable := True, #expand := True]
-  size <- new Gtk.TreeViewColumn [#title := "Size", #resizable := True]
-  lastModified <- new Gtk.TreeViewColumn [#title := "Last modified", #resizable := True]
-  listStore <- Gtk.listStoreNew (take 4 (repeat gtypeString))
-  treeView <- new Gtk.TreeView [#model := listStore]
+  let createColumn = \treeView args -> do { column <- new Gtk.TreeViewColumn args
+                                          ; #appendColumn treeView column
+                                          ; return column }
 
-  filenameCellRenderer <- Gtk.cellRendererTextNew
-  sizeCellRenderer <- Gtk.cellRendererTextNew
-  lastModifiedCellRenderer <- Gtk.cellRendererTextNew
-  iconRenderer <- Gtk.cellRendererPixbufNew
+  columns <- mapM (createColumn treeView) [ [#title := "", #resizable := False, #expand := False]
+                                          , [#title := "Name", #resizable := True, #expand := True]
+                                          , [#title := "Size", #resizable := True]
+                                          , [#title := "Last modified", #resizable := True]]
 
-  #setCellDataFunc filename filenameCellRenderer (Just filenameRenderFunc)
-  #setCellDataFunc size sizeCellRenderer (Just sizeRenderFunc)
-  #setCellDataFunc lastModified lastModifiedCellRenderer (Just lastModifiedRenderFunc)
+  listStore <- Gtk.listStoreNew (take (length columns) (repeat gtypeString))
 
-  let installRenderer = \renderer column -> do { abstractRenderer <- Gtk.toCellRenderer renderer;
-                                                 #packStart column abstractRenderer False }
-
-  installRenderer filenameCellRenderer filename
-  installRenderer sizeCellRenderer size
-  installRenderer lastModifiedCellRenderer lastModified
-  iconColumnA <- Gtk.toCellRenderer iconRenderer
-  #packStart iconColumn iconColumnA False
-
-  #appendColumn treeView iconColumn
-  #appendColumn treeView filename
-  #appendColumn treeView size
-  #appendColumn treeView lastModified
+  set treeView [#model := listStore]
 
   cdRef <- getCurrentDirectory >>= newIORef
   icons <- platformIcons
 
-  runApp (AppState win [iconColumn, filename, size, lastModified] listStore cdRef icons) $ do
-    iconRenderFunc >>= liftIO . (#setCellDataFunc iconColumn iconRenderer) . Just
-    onRowActivated >>= liftIO . (on treeView #rowActivated)
+  runApp (AppState win treeView columns listStore cdRef icons) $ do
+    initIconColumn
+    initFilenameColumn
+    initSizeColumn
+    initModificationColumn
+    setOnRowActivatedCallback
     liftIO (getCurrentDirectory >>= makeAbsolute) >>= changeDirectory
     #add scrolledWindow treeView
     #showAll win
 
 
-runApp :: AppState -> App () -> IO ()
-runApp state action = do
-  runReaderT action state
-  Gtk.main
+
+initIconColumn :: App ()
+initIconColumn = do
+  iconRenderer <- liftIO $ Gtk.cellRendererPixbufNew
+  iconColumn <- asks $ head . getColumns
+  liftIO $ (Gtk.toCellRenderer iconRenderer) >>= (\c -> #packStart iconColumn c False)
+  iconRenderFunc >>= liftIO . (#setCellDataFunc iconColumn iconRenderer) . Just
+
+initFilenameColumn :: App ()
+initFilenameColumn = do
+  filenameCellRenderer <- liftIO $ Gtk.cellRendererTextNew
+  column <- asks $ (flip (!!) 1) . getColumns
+  liftIO $ #setCellDataFunc column filenameCellRenderer (Just filenameRenderFunc)
+  abstractRenderer <- Gtk.toCellRenderer filenameCellRenderer
+  #packStart column abstractRenderer False
+
+initSizeColumn :: App ()
+initSizeColumn = do
+  sizeCellRenderer <- liftIO $ Gtk.cellRendererTextNew
+  column <- asks $ (flip (!!) 2) . getColumns
+  liftIO $ #setCellDataFunc column sizeCellRenderer (Just sizeRenderFunc)
+  abstractRenderer <- Gtk.toCellRenderer sizeCellRenderer
+  #packStart column abstractRenderer False
+
+initModificationColumn :: App ()
+initModificationColumn = do
+  modificationCellRenderer <- liftIO $ Gtk.cellRendererTextNew
+  column <- asks $ (flip (!!) 3) . getColumns
+  liftIO $ #setCellDataFunc column modificationCellRenderer (Just lastModifiedRenderFunc)
+  abstractRenderer <- Gtk.toCellRenderer modificationCellRenderer
+  #packStart column abstractRenderer False
 
 
 onRowActivated :: App Gtk.TreeViewRowActivatedCallback
@@ -97,6 +111,11 @@ onRowActivated = do
     (Just (filepath :: FilePath)) <- liftIO $ (#getValue listStore iter 0) >>= fromGValue
     changeDirectory filepath
 
+
+setOnRowActivatedCallback :: App ()
+setOnRowActivatedCallback = do
+  tree <- asks getTreeView
+  onRowActivated >>= liftIO . (on tree #rowActivated) >>= const (return ())
 
 changeDirectory :: FilePath -> App ()
 changeDirectory newPath = do
@@ -117,7 +136,8 @@ changeDirectory newPath = do
 filenameRenderFunc :: Gtk.TreeCellDataFunc
 filenameRenderFunc column renderer model iter = do
     textRenderer <- (unsafeCastTo Gtk.CellRendererText renderer)
-    set textRenderer [#text :=> (getFileFromRow model iter) >>= getFileName >>= (return . pack), #ellipsize := EllipsizeModeEnd]
+    set textRenderer [ #text :=> (getFileFromRow model iter) >>= getFileName >>= (return . pack)
+                     , #ellipsize := EllipsizeModeEnd]
 
 
 sizeRenderFunc :: Gtk.TreeCellDataFunc
@@ -166,6 +186,6 @@ iconRenderFunc = do
         Just status -> do
           icon <- getIcon status
           case icon of
-            Just buf -> liftIO $ Gtk.setCellRendererPixbufPixbuf pixBufRenderer buf
-            Nothing -> liftIO $ Gtk.clearCellRendererPixbufPixbuf pixBufRenderer
+            Just buf -> liftIO $ set pixBufRenderer [#pixbuf := buf]
+            Nothing -> liftIO $ clear pixBufRenderer #pixbuf
         Nothing -> (findIcon LockedFileIcon) >>= (liftIO . (Gtk.setCellRendererPixbufPixbuf pixBufRenderer))
