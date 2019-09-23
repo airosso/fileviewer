@@ -1,20 +1,23 @@
-{-# LANGUAGE OverloadedStrings, OverloadedLabels, TypeApplications, ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedLabels    #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 module Files where
 
 import qualified GI.Gtk as Gtk
 
+import System.Directory (getDirectoryContents, getPermissions, readable)
+import System.FilePath.Posix (joinPath, splitPath, takeFileName, (</>))
 import System.Posix.Files
-import System.FilePath.Posix (takeFileName, joinPath, splitPath, (</>))
-import System.Directory (getPermissions, readable, getDirectoryContents)
 
 import Data.Functor (($>))
-import Data.Time.Clock.POSIX (POSIXTime)
 import Data.IORef (readIORef)
+import Data.Time.Clock.POSIX (POSIXTime)
 
-import Control.Exception (catch, SomeException)
+import Control.Exception (SomeException, catch)
 import Control.Monad.Reader (asks, liftIO)
 
-import AppState (App, getColumns, getListStore, getCD)
+import AppState (App, getCD, getColumns, getListStore)
 import Utils (toInt32)
 
 
@@ -22,7 +25,7 @@ getParentPath :: FilePath -> Maybe FilePath
 getParentPath path =
   case dropLast $ splitPath path of
     [] -> Nothing
-    x -> Just (joinPath x)
+    x  -> Just (joinPath x)
 
 getFiles :: FilePath -> IO [FilePath]
 getFiles dir = do
@@ -69,13 +72,13 @@ getDirectoryName path = getFileName path >>= return . (\x -> if null x then "/" 
 isFileHidden :: FilePath -> IO Bool
 isFileHidden = isFileHidden' . takeFileName
   where
-    isFileHidden' ".." = return False
+    isFileHidden' ".."     = return False
     isFileHidden' ('.':xs) = return True
-    isFileHidden' path = return False
+    isFileHidden' path     = return False
 
 getModificationTime :: FileStatus -> POSIXTime
 getModificationTime x = realToFrac $ modificationTime x
 
 dropLast :: [a] -> [a]
 dropLast (x : y : []) = [x]
-dropLast (x : xs) = x : (dropLast xs)
+dropLast (x : xs)     = x : (dropLast xs)

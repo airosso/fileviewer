@@ -1,60 +1,42 @@
-{-# LANGUAGE OverloadedStrings, OverloadedLabels, TypeApplications, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE OverloadedLabels    #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 module Main where
 
-import qualified GI.Gtk as Gtk
 import Data.GI.Base
 import Data.GI.Base.GType (gtypeString, gtypeULong)
-import Data.GI.Base.ShortPrelude (Int32, clear, AttrOpTag(..), AttrOp(..))
+import Data.GI.Base.ShortPrelude (AttrOp (..), AttrOpTag (..), Int32, clear)
+import qualified GI.Gtk as Gtk
 
-import GI.Pango.Enums (EllipsizeMode(..))
+import GI.Pango.Enums (EllipsizeMode (..))
 
-import Data.Text (pack, unpack, Text)
-import Data.List (sort)
-import Data.IORef (newIORef, readIORef, writeIORef, IORef)
 import Data.Functor (($>))
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.List (sort)
 import Data.Maybe (fromJust)
+import Data.Text (Text, pack, unpack)
 
-import System.Directory (getCurrentDirectory, getFileSize, makeAbsolute, canonicalizePath)
-import System.Posix.Files (getFileStatus, isRegularFile, isDirectory)
-import System.FilePath.Posix ((</>), isAbsolute, normalise, takeFileName)
+import System.Directory (canonicalizePath, getCurrentDirectory, getFileSize, makeAbsolute)
+import System.FilePath.Posix (isAbsolute, normalise, takeFileName, (</>))
+import System.Posix.Files (getFileStatus, isDirectory, isRegularFile)
 import System.Random (getStdRandom, next)
 
+import Control.Exception (SomeException, catch)
 import Control.Monad (mapM)
-import Control.Monad.Reader (asks, ask, liftIO, runReaderT, when)
-import Control.Exception ( catch, SomeException)
+import Control.Monad.Reader (ask, asks, liftIO, runReaderT, when)
 
-import Foreign.Ptr (castPtr, Ptr(..))
+import Foreign.Ptr (Ptr (..), castPtr)
 import Foreign.Storable (peek)
 
-import AppState ( App
-                , AppState(..)
-                , IconType(..)
-                , getListStore
-                , getIcon
-                , appIcon
-                , findIcon
-                , platformIcons
-                , runApp
-                )
+import AppState (App, AppState (..), IconType (..), appIcon, findIcon, getIcon, getListStore,
+                 platformIcons, runApp)
 
-import Files ( getFileName
-             , getFiles
-             , getModificationTime
-             , getFileCount
-             , getRowFileStatus
-             , getDirectoryName
-             , getFileFromRow
-             , appendFileRow
-             , isFileHidden
-             , isReadable
-             , isGoUpFile
-             )
+import Files (appendFileRow, getDirectoryName, getFileCount, getFileFromRow, getFileName, getFiles,
+              getModificationTime, getRowFileStatus, isFileHidden, isGoUpFile, isReadable)
 
-import Utils ( toInt32
-             , pluralize
-             , formatPosixTime
-             , byteConverter
-             )
+import Utils (byteConverter, formatPosixTime, pluralize, toInt32)
 
 
 main :: IO ()
@@ -228,7 +210,7 @@ changeDirectory newPath = do
   result <- liftIO $ catch (runReaderT changeDirectoryImpl state) (errorHandler (writeIORef cdRef cdBefore))
   case result of
     Just (title, message) -> showErrorDialog title message
-    Nothing -> return ()
+    Nothing               -> return ()
   where
     errorHandler :: IO () -> SomeException -> IO (Maybe (String, String))
     errorHandler before e = do
@@ -263,7 +245,7 @@ sizeRenderFunc column renderer model iter = do
     fileStatus <- getRowFileStatus file
     case fileStatus of
       Just status -> set textRenderer [#text :=> (pack <$> getSizeLabel status file)]
-      Nothing -> clear textRenderer #text
+      Nothing     -> clear textRenderer #text
     when (isGoUpFile file) (clear textRenderer #text)
     set textRenderer [#foreground := "#aaaaaa"]
   where
@@ -301,5 +283,5 @@ iconRenderFunc = do
           icon <- getIcon status
           case icon of
             Just buf -> liftIO $ set pixBufRenderer [#pixbuf := buf]
-            Nothing -> liftIO $ clear pixBufRenderer #pixbuf
+            Nothing  -> liftIO $ clear pixBufRenderer #pixbuf
         Nothing -> (findIcon LockedFileIcon) >>= (liftIO . (Gtk.setCellRendererPixbufPixbuf pixBufRenderer))

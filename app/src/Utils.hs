@@ -2,7 +2,7 @@ module Utils where
 
 import Data.GI.Base.ShortPrelude (Int32, Int64)
 import Data.Time.Clock.POSIX (POSIXTime, posixSecondsToUTCTime)
-import Data.Time.Format (formatTime, defaultTimeLocale)
+import Data.Time.Format (defaultTimeLocale, formatTime)
 
 import Numeric (showFFloat)
 
@@ -11,9 +11,9 @@ toInt32 :: Integral a => a -> Int32
 toInt32 = fromIntegral
 
 pluralize :: Int -> String -> String
-pluralize 0 word = word
-pluralize 1 word = word
-pluralize count [] = "s"
+pluralize 0 word       = word
+pluralize 1 word       = word
+pluralize count []     = "s"
 pluralize count (x:xs) = (x:(pluralize count xs))
 
 formatPosixTime :: POSIXTime -> String

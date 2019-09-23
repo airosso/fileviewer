@@ -1,11 +1,11 @@
 module AppState where
 
+import GI.GdkPixbuf.Objects (Pixbuf, pixbufNewFromFile, pixbufNewFromFileAtSize)
 import qualified GI.Gtk as Gtk
-import GI.GdkPixbuf.Objects (Pixbuf, pixbufNewFromFileAtSize, pixbufNewFromFile)
 
 import Control.Monad.Reader (ReaderT, asks, liftIO, runReaderT)
 
-import Data.IORef (newIORef, IORef)
+import Data.IORef (IORef, newIORef)
 import Data.Text (pack)
 
 import System.Posix.Files (FileStatus, isDirectory, isRegularFile)
@@ -15,12 +15,12 @@ import Paths_app (getDataFileName)
 
 type App a = ReaderT AppState IO a
 
-data AppState = AppState { getWindow :: Gtk.ApplicationWindow
-                         , getTreeView :: Gtk.TreeView
-                         , getColumns :: [Gtk.TreeViewColumn]
+data AppState = AppState { getWindow    :: Gtk.ApplicationWindow
+                         , getTreeView  :: Gtk.TreeView
+                         , getColumns   :: [Gtk.TreeViewColumn]
                          , getListStore :: Gtk.ListStore
-                         , getCD :: IORef FilePath
-                         , getIcons :: [(IconType, Pixbuf)]
+                         , getCD        :: IORef FilePath
+                         , getIcons     :: [(IconType, Pixbuf)]
                          }
 
 runApp :: AppState -> App () -> IO ()
