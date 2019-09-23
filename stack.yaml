@@ -45,6 +45,7 @@ extra-deps:
   - text-1.2.3.1
   - time-1.8.0.2
   - gi-gdkpixbuf-2.0.23
+  - process-1.6.5.0
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

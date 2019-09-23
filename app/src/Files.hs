@@ -9,6 +9,7 @@ import qualified GI.Gtk as Gtk
 import System.Directory (getDirectoryContents, getPermissions, readable)
 import System.FilePath.Posix (joinPath, splitPath, takeFileName, (</>))
 import System.Posix.Files
+import System.Process (spawnCommand)
 
 import Data.Functor (($>))
 import Data.IORef (readIORef)
@@ -52,6 +53,9 @@ appendFileRow file = do
   rowCount <- asks $ length . getColumns
   values <- liftIO $ sequenceA $ take rowCount $ repeat $ Gtk.toGValue (Just $ currentDir </> file)
   liftIO $ #set listStore iter [0 .. toInt32 (rowCount - 1)] values
+
+openFile :: FilePath -> App ()
+openFile path = liftIO $ spawnCommand ("xdg-open " ++ path) $> ()
 
 isReadable :: FilePath -> IO Bool
 isReadable path = catch (readable <$> getPermissions path) (\(e :: SomeException) -> return False)

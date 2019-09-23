@@ -67,6 +67,13 @@ packages:
       sha256: 71b891d78fd2a1ac65f6ddaddbf3fbd664e72eb7ca0798f417fae2abc91f294a
   original:
     hackage: gi-gdkpixbuf-2.0.23
+- completed:
+    hackage: process-1.6.5.0@sha256:0f42f038aca38f990b68083a1b5bed34ace91b93539095a9ec1e2d44cd435ddb,2469
+    pantry-tree:
+      size: 1211
+      sha256: 853918f4b144d67d8246a82ad65bd3dfbcfde71aefb69386c1bbd6a8e53a95c4
+  original:
+    hackage: process-1.6.5.0
 snapshots:
 - completed:
     size: 523884

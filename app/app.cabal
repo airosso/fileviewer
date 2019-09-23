@@ -12,7 +12,7 @@ category:            Web
 build-type:          Simple
 cabal-version:       >=2.0
 tested-with:         GHC == 8.6.5
-data-dir:            resources
+data-files:          ./resources/icons/png/*.png
 
 Executable App
   hs-source-dirs: src
@@ -33,4 +33,5 @@ Executable App
     , time
     , gi-gdkpixbuf
     , gi-pango
+    , process
   ghc-options: -threaded

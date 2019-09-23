@@ -34,7 +34,7 @@ import AppState (App, AppState (..), IconType (..), appIcon, findIcon, getIcon, 
                  platformIcons, runApp)
 
 import Files (appendFileRow, getDirectoryName, getFileCount, getFileFromRow, getFileName, getFiles,
-              getModificationTime, getRowFileStatus, isFileHidden, isGoUpFile, isReadable)
+              getModificationTime, getRowFileStatus, isFileHidden, isGoUpFile, isReadable, openFile)
 
 import Utils (byteConverter, formatPosixTime, pluralize, toInt32)
 
@@ -194,8 +194,14 @@ onRowActivated = do
   return $ \path _ -> (flip runReaderT) env $ do
     listStore <- asks getListStore
     (_, iter) <- #getIter listStore path
-    (Just (filepath :: FilePath)) <- liftIO $ (#getValue listStore iter 0) >>= fromGValue
-    changeDirectory filepath
+    model <- liftIO $ unsafeCastTo Gtk.TreeModel listStore
+    file <- liftIO $ getFileFromRow model iter
+    fileStatus <- liftIO $ getRowFileStatus file
+    case fileStatus of
+      Just status -> if isDirectory status
+                       then changeDirectory file
+                       else openFile file
+      Nothing -> showErrorDialog "Access denied" ("Cannot access " ++ file)
 
 setOnRowActivatedCallback :: App ()
 setOnRowActivatedCallback = do
