@@ -2,7 +2,9 @@ module AppState where
 
 import qualified GI.Gtk as Gtk
 import GI.GdkPixbuf.Objects (Pixbuf, pixbufNewFromFileAtSize, pixbufNewFromFile)
+
 import Control.Monad.Reader (ReaderT, asks, liftIO, runReaderT)
+
 import Data.IORef (newIORef, IORef)
 import Data.Text (pack)
 
@@ -10,7 +12,9 @@ import System.Posix.Files (FileStatus, isDirectory, isRegularFile)
 
 import Paths_app (getDataFileName)
 
+
 type App a = ReaderT AppState IO a
+
 data AppState = AppState { getWindow :: Gtk.ApplicationWindow
                          , getTreeView :: Gtk.TreeView
                          , getColumns :: [Gtk.TreeViewColumn]

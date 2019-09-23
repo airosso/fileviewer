@@ -17,6 +17,7 @@ import Control.Monad.Reader (asks, liftIO)
 import AppState (App, getColumns, getListStore, getCD)
 import Utils (toInt32)
 
+
 getParentPath :: FilePath -> Maybe FilePath
 getParentPath path =
   case dropLast $ splitPath path of

@@ -6,6 +6,7 @@ import Data.Time.Format (formatTime, defaultTimeLocale)
 
 import Numeric (showFFloat)
 
+
 toInt32 :: Integral a => a -> Int32
 toInt32 = fromIntegral
 

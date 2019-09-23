@@ -21,14 +21,41 @@ import System.Random (getStdRandom, next)
 
 import Control.Monad (mapM)
 import Control.Monad.Reader (asks, ask, liftIO, runReaderT, when)
-import Control.Exception (catch, SomeException)
+import Control.Exception ( catch, SomeException)
 
 import Foreign.Ptr (castPtr, Ptr(..))
 import Foreign.Storable (peek)
 
-import AppState (App, AppState(..), getListStore, findIcon, IconType(..), platformIcons, getIcon, runApp, appIcon)
-import Files (getFileName, getFiles, getModificationTime, getFileCount, isFileHidden, isReadable, getFileFromRow, appendFileRow, getRowFileStatus, isGoUpFile, getDirectoryName)
-import Utils (toInt32, pluralize, formatPosixTime, byteConverter)
+import AppState ( App
+                , AppState(..)
+                , IconType(..)
+                , getListStore
+                , getIcon
+                , appIcon
+                , findIcon
+                , platformIcons
+                , runApp
+                )
+
+import Files ( getFileName
+             , getFiles
+             , getModificationTime
+             , getFileCount
+             , getRowFileStatus
+             , getDirectoryName
+             , getFileFromRow
+             , appendFileRow
+             , isFileHidden
+             , isReadable
+             , isGoUpFile
+             )
+
+import Utils ( toInt32
+             , pluralize
+             , formatPosixTime
+             , byteConverter
+             )
+
 
 main :: IO ()
 main = do
@@ -179,7 +206,6 @@ initModificationColumn = do
   abstractRenderer <- Gtk.toCellRenderer modificationCellRenderer
   #packStart column abstractRenderer False
 
-
 onRowActivated :: App Gtk.TreeViewRowActivatedCallback
 onRowActivated = do
   env <- ask
@@ -188,7 +214,6 @@ onRowActivated = do
     (_, iter) <- #getIter listStore path
     (Just (filepath :: FilePath)) <- liftIO $ (#getValue listStore iter 0) >>= fromGValue
     changeDirectory filepath
-
 
 setOnRowActivatedCallback :: App ()
 setOnRowActivatedCallback = do
@@ -225,13 +250,11 @@ changeDirectory newPath = do
       entry <- getEntry
       set entry [#text := pack filename] $> Nothing
 
-
 filenameRenderFunc :: Gtk.TreeCellDataFunc
 filenameRenderFunc column renderer model iter = do
     textRenderer <- (unsafeCastTo Gtk.CellRendererText renderer)
     set textRenderer [ #text :=> (getFileFromRow model iter) >>= getFileName >>= (return . pack)
                      , #ellipsize := EllipsizeModeEnd]
-
 
 sizeRenderFunc :: Gtk.TreeCellDataFunc
 sizeRenderFunc column renderer model iter = do
@@ -249,7 +272,6 @@ sizeRenderFunc column renderer model iter = do
       | isRegularFile status = byteConverter <$> getFileSize file
       | otherwise = return ""
 
-
 lastModifiedRenderFunc :: Gtk.TreeCellDataFunc
 lastModifiedRenderFunc column renderer model iter =
   do
@@ -263,7 +285,6 @@ lastModifiedRenderFunc column renderer model iter =
       Nothing -> clear textRenderer #text
     when (isGoUpFile file) (clear textRenderer #text)
     set textRenderer [#foreground := "#aaaaaa"]
-
 
 iconRenderFunc :: App Gtk.TreeCellDataFunc
 iconRenderFunc = do
