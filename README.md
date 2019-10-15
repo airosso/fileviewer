@@ -1,6 +1,11 @@
 ### Haskell FileViewer app for Linux (GTK)
 
-Use `stack run App` to run Application.
+#### Installation
+
+```shell
+sudo apt-get install libgirepository1.0-dev libwebkit2gtk-4.0-dev libgtksourceview-3.0-dev
+stack run App
+```
 
 ##### Features:
 
